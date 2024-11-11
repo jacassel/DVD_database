@@ -1,0 +1,94 @@
+CREATE TABLE detail_table (
+detail_id                  	SERIAL PRIMARY KEY,
+category_name        	VARCHAR(25) DEFAULT NULL,
+title                          	VARCHAR(255) DEFAULT NULL,
+amount                    	NUMERIC(5, 2) DEFAULT NULL,
+full_name                	VARCHAR(90) DEFAULT NULL,
+email                       	VARCHAR(50) DEFAULT NULL
+); // Creates the Detail Table
+
+CREATE TABLE summary_table (
+        	category_name       	VARCHAR(25),
+        	total_profits            	NUMERIC(8,2)
+); // Creates the Summery Table
+
+CREATE OR REPLACE FUNCTION make_full_name (first_name VARCHAR, last_name VARCHAR)
+RETURNS VARCHAR(90)
+LANGUAGE plpgsql
+AS
+$$
+DECLARE full_name VARCHAR(90);
+BEGIN
+SELECT CONCAT(first_name, ' ', last_name) INTO full_name;
+RETURN full_name;
+END;
+$$ // Function to combine the first and last names of the customers
+
+INSERT INTO detail_table (category_name, title, amount, full_name, email)
+        	SELECT "name", title, amount, make_full_name(first_name, last_name), email
+FROM category
+JOIN 
+film_category ON category.category_id = film_category.category_id
+JOIN
+film ON film_category.film_id = film.film_id
+JOIN
+inventory ON film.film_id = inventory.film_id
+JOIN
+rental ON inventory.inventory_id = rental.inventory_id
+JOIN
+payment ON rental.rental_id = payment.rental_id
+JOIN
+customer ON rental.customer_id = customer.customer_id; // Fills the Detail Table with data from the database
+
+CREATE OR REPLACE FUNCTION insert_summary_data()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+DELETE FROM summary_table;
+INSERT INTO summary_table
+SELECT category_name, SUM(amount) AS total_profits
+FROM detail_table
+GROUP BY category_name
+ORDER BY total_profits DESC;
+RETURN NEW;
+END;
+$$;
+ 
+CREATE TRIGGER load_summary_data
+ AFTER INSERT
+ ON detail_table
+ FOR EACH STATEMENT
+ EXECUTE PROCEDURE insert_summary_data(); // Creates trigger function and attaches it to the detail table. This fills the summery table after running the INSERT command
+
+CREATE OR REPLACE PROCEDURE refresh_report()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+DELETE FROM detail_table;
+DELETE FROM summary_table;
+INSERT INTO detail_table (category_name, title, amount, full_name, email)
+ SELECT "name",
+  title,
+amount,
+make_full_name(first_name, last_name),
+email
+FROM category
+JOIN 
+film_category ON category.category_id = film_category.category_id
+JOIN
+film ON film_category.film_id = film.film_id
+JOIN
+inventory ON film.film_id = inventory.film_id
+JOIN
+rental ON inventory.inventory_id = rental.inventory_id
+JOIN
+payment ON rental.rental_id = payment.rental_id
+JOIN
+customer ON rental.customer_id = customer.customer_id;
+RETURN;
+END;
+$$; // Refreshes the data in the detail and summary table to keep the data up to date and helpful for stakeholders
+
+
+https://www.rockdata.net/tutorial/sample-database/ //Database Details Link
